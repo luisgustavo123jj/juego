@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle Royale 2D - Versión Simple</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            margin: 20px auto;
+            background-color: #8BC34A;
+            border: 4px solid #5D4037;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        #player {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: blue;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .enemy {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: red;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .bullet {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background-color: black;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        #health-bar {
+            width: 100px;
+            height: 10px;
+            background-color: #ddd;
+            margin-top: 5px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        #health {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 100%;
+        }
+        
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        
+        #start-button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        
+        #game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        
+        #restart-button {
+            padding: 10px 20px;
+            background-color: #f44336;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="player"></div>
+        
+        <div id="ui">
+            <div id="score">Puntuación: 0</div>
+            <div>Salud:</div>
+            <div id="health-bar">
+                <div id="health"></div>
+            </div>
+        </div>
+        
+        <div id="start-screen">
+            <h1>Battle Royale 2D</h1>
+            <p>Usa W, A, S, D para moverte y haz clic para disparar</p>
+            <button id="start-button">Comenzar Juego</button>
+        </div>
+        
+        <div id="game-over">
+            <h1>¡Game Over!</h1>
+            <p id="final-score">Puntuación: 0</p>
+            <button id="restart-button">Jugar de nuevo</button>
+        </div>
+    </div>
+
+    <script>
+        // Elementos del DOM
+        const gameContainer = document.getElementById('game-container');
+        const player = document.getElementById('player');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over');
+        const startButton = document.getElementById('start-button');
+        const restartButton = document.getElementById('restart-button');
+        const scoreDisplay = document.getElementById('score');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const healthDisplay = document.getElementById('health');
+        
+        // Variables del juego
+        let gameActive = false;
+        let playerX = 400;
+        let playerY = 300;
+        let playerHealth = 100;
+        let score = 0;
+        let enemies = [];
+        let bullets = [];
+        let keys = {};
+        
+        // Configuración
+        const gameWidth = 800;
+        const gameHeight = 600;
+        const playerSpeed = 4;
+        const enemySpeed = 2;
+        const bulletSpeed = 8;
+        const enemySpawnRate = 1500; // milisegundos
+        let enemySpawnInterval;
+        
+        // Iniciar juego
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', startGame);
+        
+        // Controles del teclado
+        window.addEventListener('keydown', function(e) {
+            keys[e.key.toLowerCase()] = true;
+        });
+        
+        window.addEventListener('keyup', function(e) {
+            keys[e.key.toLowerCase()] = false;
+        });
+        
+        // Control del mouse para disparar
+        gameContainer.addEventListener('click', function(e) {
+            if (gameActive) {
+                const rect = gameContainer.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                shoot(mouseX, mouseY);
+            }
+        });
+        
+        function startGame() {
+            // Reiniciar variables
+            gameActive = true;
+            playerX = 400;
+            playerY = 300;
+            playerHealth = 100;
+            score = 0;
+            
+            // Limpiar enemigos y balas
+            enemies.forEach(enemy => enemy.remove());
+            bullets.forEach(bullet => bullet.remove());
+            enemies = [];
+            bullets = [];
+            
+            // Actualizar UI
+            scoreDisplay.textContent = "Puntuación: 0";
+            healthDisplay.style.width = "100%";
+            
+            // Mostrar jugador
+            player.style.left = playerX + 'px';
+            player.style.top = playerY + 'px';
+            
+            // Ocultar pantallas
+            startScreen.classList.add('hidden');
+            gameOverScreen.style.display = 'none';
+            
+            // Iniciar generación de enemigos
+            enemySpawnInterval = setInterval(spawnEnemy, enemySpawnRate);
+            
+            // Iniciar bucle de juego
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function gameLoop() {
+            if (!gameActive) return;
+            
+            // Mover jugador
+            movePlayer();
+            
+            // Mover enemigos
+            moveEnemies();
+            
+            // Mover balas
+            moveBullets();
+            
+            // Comprobar colisiones
+            checkCollisions();
+            
+            // Actualizar UI
+            updateUI();
+            
+            // Continuar bucle
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function movePlayer() {
+            // Calcular movimiento
+            let moveX = 0;
+            let moveY = 0;
+            
+            if (keys['w']) moveY -= playerSpeed;
+            if (keys['s']) moveY += playerSpeed;
+            if (keys['a']) moveX -= playerSpeed;
+            if (keys['d']) moveX += playerSpeed;
+            
+            // Normalizar movimiento diagonal
+            if (moveX !== 0 && moveY !== 0) {
+                const factor = 1 / Math.sqrt(2);
+                moveX *= factor;
+                moveY *= factor;
+            }
+            
+            // Actualizar posición
+            playerX += moveX;
+            playerY += moveY;
+            
+            // Mantener dentro de los límites
+            playerX = Math.max(10, Math.min(gameWidth - 10, playerX));
+            playerY = Math.max(10, Math.min(gameHeight - 10, playerY));
+            
+            // Actualizar elemento
+            player.style.left = playerX + 'px';
+            player.style.top = playerY + 'px';
+        }
+        
+        function spawnEnemy() {
+            // Determinar posición de aparición (desde fuera de la pantalla)
+            let x, y;
+            const side = Math.floor(Math.random() * 4);
+            
+            switch(side) {
+                case 0: // Arriba
+                    x = Math.random() * gameWidth;
+                    y = -20;
+                    break;
+                case 1: // Derecha
+                    x = gameWidth + 20;
+                    y = Math.random() * gameHeight;
+                    break;
+                case 2: // Abajo
+                    x = Math.random() * gameWidth;
+                    y = gameHeight + 20;
+                    break;
+                case 3: // Izquierda
+                    x = -20;
+                    y = Math.random() * gameHeight;
+                    break;
+            }
+            
+            // Crear enemigo
+            const enemy = document.createElement('div');
+            enemy.className = 'enemy';
+            enemy.style.left = x + 'px';
+            enemy.style.top = y + 'px';
+            gameContainer.appendChild(enemy);
+            
+            enemies.push(enemy);
+        }
+        
+        function moveEnemies() {
+            enemies.forEach(enemy => {
+                // Obtener posición actual
+                const x = parseFloat(enemy.style.left);
+                const y = parseFloat(enemy.style.top);
+                
+                // Calcular dirección hacia el jugador
+                const dx = playerX - x;
+                const dy = playerY - y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Normalizar y aplicar velocidad
+                const moveX = (dx / distance) * enemySpeed;
+                const moveY = (dy / distance) * enemySpeed;
+                
+                // Actualizar posición
+                enemy.style.left = (x + moveX) + 'px';
+                enemy.style.top = (y + moveY) + 'px';
+            });
+        }
+        
+        function shoot(targetX, targetY) {
+            // Calcular dirección
+            const dx = targetX - playerX;
+            const dy = targetY - playerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Normalizar y aplicar velocidad
+            const speedX = (dx / distance) * bulletSpeed;
+            const speedY = (dy / distance) * bulletSpeed;
+            
+            // Crear bala
+            const bullet = document.createElement('div');
+            bullet.className = 'bullet';
+            bullet.style.left = playerX + 'px';
+            bullet.style.top = playerY + 'px';
+            bullet.speedX = speedX;
+            bullet.speedY = speedY;
+            gameContainer.appendChild(bullet);
+            
+            bullets.push(bullet);
+        }
+        
+        function moveBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                
+                // Obtener posición actual
+                const x = parseFloat(bullet.style.left);
+                const y = parseFloat(bullet.style.top);
+                
+                // Actualizar posición
+                bullet.style.left = (x + bullet.speedX) + 'px';
+                bullet.style.top = (y + bullet.speedY) + 'px';
+                
+                // Eliminar si está fuera de la pantalla
+                if (x < -10 || x > gameWidth + 10 || y < -10 || y > gameHeight + 10) {
+                    gameContainer.removeChild(bullet);
+                    bullets.splice(i, 1);
+                }
+            }
+        }
+        
+        function checkCollisions() {
+            // Comprobar colisiones bala-enemigo
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                const bulletX = parseFloat(bullet.style.left);
+                const bulletY = parseFloat(bullet.style.top);
+                
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    const enemyX = parseFloat(enemy.style.left);
+                    const enemyY = parseFloat(enemy.style.top);
+                    
+                    const distance = Math.sqrt(
+                        (bulletX - enemyX) * (bulletX - enemyX) +
+                        (bulletY - enemyY) * (bulletY - enemyY)
+                    );
+                    
+                    // Si hay colisión
+                    if (distance < 15) {
+                        // Eliminar enemigo y bala
+                        gameContainer.removeChild(enemy);
+                        enemies.splice(j, 1);
+                        
+                        gameContainer.removeChild(bullet);
+                        bullets.splice(i, 1);
+                        
+                        // Incrementar puntuación
+                        score += 10;
+                        break;
+                    }
+                }
+            }
+            
+            // Comprobar colisiones jugador-enemigo
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                const enemyX = parseFloat(enemy.style.left);
+                const enemyY = parseFloat(enemy.style.top);
+                
+                const distance = Math.sqrt(
+                    (playerX - enemyX) * (playerX - enemyX) +
+                    (playerY - enemyY) * (playerY - enemyY)
+                );
+                
+                // Si hay colisión
+                if (distance < 20) {
+                    // Recibir daño
+                    playerHealth -= 1;
+                    
+                    // Comprobar si el jugador ha muerto
+                    if (playerHealth <= 0) {
+                        gameOver();
+                        return;
+                    }
+                }
+            }
+        }
+        
+        function updateUI() {
+            scoreDisplay.textContent = "Puntuación: " + score;
+            healthDisplay.style.width = playerHealth + "%";
+        }
+        
+        function gameOver() {
+            gameActive = false;
+            clearInterval(enemySpawnInterval);
+            
+            finalScoreDisplay.textContent = "Puntuación final: " + score;
+            gameOverScreen.style.display = 'flex';
+        }
+    </script>
